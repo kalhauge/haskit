@@ -42,7 +42,7 @@ executables:
 
 tests:
   {{name}}-test:
-    main:                Spec.hs
+    main:                Main.hs
     source-dirs:         test
     ghc-options:
     - -threaded
@@ -145,12 +145,11 @@ main = do
 
   doctests :: IO [TestTree]
   doctests = testSpecs $ it "Doctest" do
-    captureDoctest =<< glob "library/**/*.hs"
+    captureDoctest =<< glob "src/**/*.hs"
 
   hlints :: IO [TestTree]
   hlints = testSpecs $ it "HLint" do
-    hints <- hlint ["library", "test-suite", "--quiet"]
-    case hints of
+    hlint ["src", "test", "--quiet"] >>= \case 
       [] -> return ()
       a:_ -> expectationFailure (showIdeaANSI a)
 
