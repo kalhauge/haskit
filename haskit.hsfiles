@@ -1,0 +1,250 @@
+{-# START_FILE package.yaml #-}
+name:                {{name}}
+version:             0.1.0.0
+github:              "{{github-username}}{{^github-username}}githubuser{{/github-username}}/{{name}}"
+license:             BSD3
+author:              "{{author-name}}{{^author-name}}Author name here{{/author-name}}"
+maintainer:          "{{author-email}}{{^author-email}}example@example.com{{/author-email}}"
+copyright:           "{{copyright}}{{^copyright}}{{year}}{{^year}}2021{{/year}} {{author-name}}{{^author-name}}Author name here{{/author-name}}{{/copyright}}"
+
+extra-source-files:
+- README.md
+- LICENSE
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            {{category}}{{^category}}Web{{/category}}
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/{{github-username}}{{^github-username}}githubuser{{/github-username}}/{{name}}#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+
+ghc-options: -Wall
+
+library:
+  source-dirs: src
+
+executables:
+  {{name}}-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - {{name}}
+
+tests:
+  {{name}}-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - {{name}}
+    - Glob
+    - base
+    - doctest
+    - hedgehog
+    - hlint
+    - hspec
+    - hspec-discover >= 2.7
+    - hspec-hedgehog
+    - tasty
+    - tasty-hspec
+    - tasty-rerun
+
+{-# START_FILE test/Spec.hs #-}
+{-# OPTIONS_GHC -F -pgmF hspec-discover -optF --module-name=Spec -optF --no-main #-}
+{-# START_FILE test/SpecHelper.hs #-}
+module SpecHelper 
+  ( module Test.Hspec
+  , module Test.Hspec.Hedgehog
+  , prop
+  ) where
+
+import Test.Hspec
+import Test.Hspec.Hedgehog
+
+prop :: HasCallStack => String -> PropertyT IO () -> SpecWith ()
+prop msg = it msg . hedgehog
+{-# START_FILE test/LibSpec.hs #-}
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+module LibSpec where
+
+import SpecHelper
+
+import qualified Hedgehog.Gen as Gen
+import qualified Hedgehog.Range as Range
+
+spec :: Spec
+spec = describe "hspec" do 
+  it "should run this" do
+    True `shouldBe` True
+
+  describe "intergers" do 
+    prop "should preserve identity" do 
+      n :: Int <- forAll $ Gen.integral (Range.linear 0 3)
+      n === n
+
+{-# START_FILE test/Main.hs #-}
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE LambdaCase #-}
+module Main where
+
+-- base 
+import Data.Functor
+import GHC.IO.Handle (hDuplicate, hDuplicateTo)
+import System.Exit
+import System.IO
+import qualified Control.Exception as E
+
+-- tasty
+import Test.Tasty
+
+-- tasty-hspec
+import Test.Tasty.Hspec
+
+-- tasty-rerun
+import Test.Tasty.Ingredients.Rerun
+
+-- glob
+import System.FilePath.Glob (glob)
+
+-- doctest
+import Test.DocTest (doctest)
+
+-- hlint
+import Language.Haskell.HLint
+
+import qualified Spec 
+
+main :: IO ()
+main = do
+  m <- concat <$> sequence
+    [ specifications
+    , doctests
+    , hlints
+    ]
+
+  defaultMainWithRerun (testGroup "All" m)
+
+ where
+  specifications :: IO [TestTree]
+  specifications = (:[]) <$> testSpec "Specifications" 
+    Spec.spec
+
+  doctests :: IO [TestTree]
+  doctests = testSpecs $ it "Doctest" do
+    captureDoctest =<< glob "library/**/*.hs"
+
+  hlints :: IO [TestTree]
+  hlints = testSpecs $ it "HLint" do
+    hints <- hlint ["library", "test-suite", "--quiet"]
+    case hints of
+      [] -> return ()
+      a:_ -> expectationFailure (showIdeaANSI a)
+
+-- | capture the doctests
+captureDoctest :: [String] -> IO ()
+captureDoctest files = withFile ".doctest" ReadWriteMode \h ->
+  E.catch
+    ( redirectingHandle stderr h (doctest files) )
+    ( \case
+        ExitFailure _ -> do
+          hFlush h
+          hSeek h AbsoluteSeek 0
+          expectationFailure =<< hGetContents h
+        ExitSuccess -> do
+          return ()
+    )
+
+-- | redirectingHandle; borrowed from 
+-- https://hackage.haskell.org/package/main-tester-0.2.0.1/docs/Test-Main.html
+redirectingHandle :: Handle -> Handle -> IO r -> IO r
+redirectingHandle from to action = E.bracket 
+  ( hDuplicate from >>= (hDuplicateTo to from $>) )
+  ( \save -> hDuplicateTo save from >> hClose save )
+  ( const action )
+
+
+{-# START_FILE src/Lib.hs #-}
+module Lib
+    ( someFunc
+    ) where
+
+someFunc :: IO ()
+someFunc = putStrLn "someFunc"
+
+{-# START_FILE app/Main.hs #-}
+module Main where
+
+import Lib
+
+main :: IO ()
+main = someFunc
+
+{-# START_FILE Makefile #-}
+develop:
+	ghcid -c 'stack ghci {{name}}:lib {{name}}:test:{{name}}-test --ghci-options -fobject-code' --test ':main --rerun'
+
+{-# START_FILE README.md #-}
+# {{name}}
+
+
+## Developing
+
+To develop run 
+
+    make develop
+
+{-# START_FILE ChangeLog.md #-}
+# Changelog for {{name}}
+
+## Unreleased changes
+
+{-# START_FILE LICENSE #-}
+Copyright {{author-name}}{{^author-name}}Author name here{{/author-name}} (c) {{year}}{{^year}}2019{{/year}}
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+
+    * Redistributions in binary form must reproduce the above
+      copyright notice, this list of conditions and the following
+      disclaimer in the documentation and/or other materials provided
+      with the distribution.
+
+    * Neither the name of {{author-name}}{{^author-name}}Author name here{{/author-name}} nor the names of other
+      contributors may be used to endorse or promote products derived
+      from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+{-# START_FILE .gitignore #-}
+.stack-work/
+.tasty-rerun-log
+.doctest
