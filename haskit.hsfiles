@@ -157,12 +157,12 @@ main = do
 captureDoctest :: [String] -> IO ()
 captureDoctest files = withFile ".doctest" ReadWriteMode \h ->
   E.catch
-    ( redirectingHandle stderr h (doctest files) )
+    ( withFile ".doctest" WriteMode \h ->
+        redirectingHandle stderr h (doctest files) 
+    )
     ( \case
         ExitFailure _ -> do
-          hFlush h
-          hSeek h AbsoluteSeek 0
-          expectationFailure =<< hGetContents h
+          expectationFailure =<< readFile ".doctest"
         ExitSuccess -> do
           return ()
     )
